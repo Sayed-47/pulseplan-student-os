@@ -85,6 +85,19 @@ describe("buildStudyPlan", () => {
     expect(plan.unscheduledMinutes["a-1"]).toBeGreaterThan(0);
   });
 
+  it("keeps short remainders inside valid focus blocks", () => {
+    const plan = buildStudyPlan(
+      [assignment({ estimatedMinutes: 70, dueDate: "2026-11-22" })],
+      { now, days: 2, dailyCapacityMinutes: 180 },
+    );
+
+    const durations = plan.days.flatMap((day) =>
+      day.sessions.map((session) => session.durationMinutes),
+    );
+    expect(durations).toEqual([55, 15]);
+    expect(plan.unscheduledMinutes["a-1"]).toBeUndefined();
+  });
+
   it("adds one hour of weekend capacity", () => {
     const plan = buildStudyPlan([], {
       now,

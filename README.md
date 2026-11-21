@@ -30,7 +30,9 @@ PulsePlan complements the hackathon [Student OS workspace](https://app.notion.co
 Student OS Assignments → normalize → risk score → capacity-aware plan → Study Sessions in Notion
 ```
 
-The adapter auto-detects common names such as `Name`, `Assignment`, `Due`, `Deadline`, `Course`, `Class`, `Status`, `Priority`, `Estimated hours`, and `Progress`. Environment variables can override every mapping, so the app does not depend on one exact template schema.
+The adapter auto-detects common names such as `Name`, `Assignment`, `Due`, `Deadline`, `Course`, `Class`, `Status`, `Priority`, `Estimated hours`, and `Progress`. It follows Course relations to display the related page title. Environment variables can override every mapping, so the app does not depend on one exact template schema.
+
+For the live hackathon workspace, the official Notion CLI provisioned a separate **PulsePlan Student OS** dashboard with the guide's four core databases, Courses, Assignments, Notes, and Tasks. It also added the Study Sessions write-back database, Courses ↔ Assignments and Courses ↔ Notes relations, realistic sample rows, and a verified live focus session.
 
 ## Demo workflow
 
@@ -113,7 +115,7 @@ The token is read only in server routes. It is never included in browser JavaScr
 | Name | Title | Yes |
 | Due | Date | Yes |
 | Status | Status or Checkbox | No |
-| Course | Select or Text | No |
+| Course | Relation, Select, or Text | No |
 | Estimated hours | Number | No |
 | Priority | Select | No |
 | Progress | Number (`0–1` or `0–100`) | No |

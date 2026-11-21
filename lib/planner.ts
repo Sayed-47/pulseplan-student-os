@@ -182,12 +182,21 @@ export function buildStudyPlan(
         const minutesLeft = remaining.get(item.id) ?? 0;
         const alreadyAllocated = allocatedToday.get(item.id) ?? 0;
         const assignmentRoom = MAX_ASSIGNMENT_PER_DAY - alreadyAllocated;
-        const durationMinutes = Math.min(
+        let durationMinutes = Math.min(
           MAX_SESSION,
           minutesLeft,
           assignmentRoom,
           freeMinutes,
         );
+        const remainder = minutesLeft - durationMinutes;
+        const adjustment = MIN_SESSION - remainder;
+        if (
+          remainder > 0 &&
+          remainder < MIN_SESSION &&
+          durationMinutes - adjustment >= MIN_SESSION
+        ) {
+          durationMinutes -= adjustment;
+        }
         if (durationMinutes < MIN_SESSION) continue;
 
         const startBase = isWeekend ? 10 * 60 : 17 * 60 + 30;

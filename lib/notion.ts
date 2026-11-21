@@ -152,6 +152,20 @@ function readText(property: RawProperty | undefined): string {
   }
 }
 
+function readPageTitle(page: PageResponse): string {
+  const titleProperty = Object.values(page.properties ?? {}).find(
+    (property) => property.type === "title",
+  );
+  return readText(titleProperty);
+}
+
+function relationIds(property: RawProperty | undefined): string[] {
+  if (property?.type !== "relation") return [];
+  return (property.relation ?? [])
+    .map((relation) => relation.id)
+    .filter((id): id is string => Boolean(id));
+}
+
 function readNumber(property: RawProperty | undefined): number | undefined {
   if (!property) return undefined;
   if (property.type === "number" && typeof property.number === "number") {
@@ -171,18 +185,25 @@ function readDate(property: RawProperty | undefined): string | undefined {
   return value?.slice(0, 10);
 }
 
-function toStatus(property: RawProperty | undefined): Assignment["status"] {
-  if (property?.type === "checkbox") {
-    return property.checkbox ? "Done" : "Not started";
-  }
-  const status = readText(property).toLowerCase();
+export function normalizeStatusName(value: string): Assignment["status"] {
+  const status = value.toLowerCase();
   if (["done", "complete", "completed", "submitted", "finished"].some((word) => status.includes(word))) {
     return "Done";
+  }
+  if (["not started", "not begun", "to do", "todo", "backlog"].some((word) => status.includes(word))) {
+    return "Not started";
   }
   if (["progress", "doing", "started", "review"].some((word) => status.includes(word))) {
     return "In progress";
   }
   return "Not started";
+}
+
+function toStatus(property: RawProperty | undefined): Assignment["status"] {
+  if (property?.type === "checkbox") {
+    return property.checkbox ? "Done" : "Not started";
+  }
+  return normalizeStatusName(readText(property));
 }
 
 function toPriority(property: RawProperty | undefined): Priority {
@@ -238,6 +259,22 @@ export async function fetchNotionAssignments(): Promise<Assignment[]> {
   }
 
   const pages = await queryAllPages(dataSourceId);
+  const relatedTitles = new Map<string, string>();
+  if (names.course && schema[names.course]?.type === "relation") {
+    const relatedIds = new Set(
+      pages.flatMap((page) =>
+        relationIds(page.properties?.[names.course!]),
+      ),
+    );
+    for (const relatedId of relatedIds) {
+      const relatedPage = await notionRequest<PageResponse>(
+        `/pages/${encodeURIComponent(relatedId)}`,
+      );
+      const relatedTitle = readPageTitle(relatedPage);
+      if (relatedTitle) relatedTitles.set(relatedId, relatedTitle);
+    }
+  }
+
   return pages.flatMap((page): Assignment[] => {
     if (page.archived || page.in_trash || !page.id || !page.properties) return [];
     const properties = page.properties;
@@ -255,11 +292,15 @@ export async function fetchNotionAssignments(): Promise<Assignment[]> {
       : progressRaw == null
         ? status === "In progress" ? 0.25 : 0
         : Math.max(0, Math.min(1, progressRaw > 1 ? progressRaw / 100 : progressRaw));
+    const courseProperty = names.course ? properties[names.course] : undefined;
+    const relatedCourseNames = relationIds(courseProperty)
+      .map((id) => relatedTitles.get(id))
+      .filter((value): value is string => Boolean(value));
 
     return [{
       id: page.id,
       title,
-      course: (names.course ? readText(properties[names.course]) : "") || "General",
+      course: relatedCourseNames.join(", ") || readText(courseProperty) || "General",
       dueDate,
       estimatedMinutes,
       completedMinutes: Math.round(estimatedMinutes * progressRatio),
