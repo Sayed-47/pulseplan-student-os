@@ -1,5 +1,7 @@
 # PulsePlan
 
+![PulsePlan live timeline dashboard](./public/dashboard-preview.webp)
+
 **Your Notion Student OS, now proactive.**
 
 PulsePlan reads assignments from Notion, explains which deadlines are becoming risky, and creates a realistic seven-day study plan that respects daily capacity. The included demo workspace makes every feature testable without credentials.
@@ -36,13 +38,14 @@ For the live hackathon workspace, the official Notion CLI provisioned a separate
 
 ## Demo workflow
 
-1. Open the dashboard. It loads safe sample assignments automatically.
-2. Read the Smart Briefing and transparent risk score.
-3. Open **Study plan** and change daily capacity from two to five hours.
-4. Observe the schedule and overload warning adapt immediately.
-5. Select a focus block to mark it complete, or export the week as CSV.
-6. Open **Assignments**, expand **Why this score?**, and inspect the four score components.
-7. Open **Notion setup** to see live integration instructions.
+1. Open **Timeline** to see live Notion courses, deadlines, the selected-day agenda, and upcoming events.
+2. Change the month or week, select a calendar date, filter by course, and search assignments.
+3. Open **Assignments** to inspect risk-ranked work and progress.
+4. Open **Courses** to compare each subject's current workload.
+5. Open **Study plan**, change daily capacity, complete a focus block, export CSV, or sync the plan to Notion.
+6. Open **Notion setup** to inspect live connection and write-back status.
+
+The interface follows the supplied Student Activities dashboard reference: a cyan icon rail, Timeline toolbar, subject cards, coral agenda, interactive blue calendar, and gradient activity panel.
 
 ## How Devin Chat was used
 
@@ -76,7 +79,7 @@ A longer evidence template is available in [`DEVIN_USAGE.md`](./DEVIN_USAGE.md).
 ### Demo mode
 
 ```bash
-git clone YOUR_PUBLIC_REPOSITORY_URL
+git clone https://github.com/Sayed-47/pulseplan-student-os.git
 cd pulseplan
 npm install
 npm run dev
@@ -157,7 +160,7 @@ The score is deterministic and capped at 100:
 app/
   api/assignments/route.ts   Notion read endpoint with safe demo fallback
   api/sync/route.ts          Validated Study Session write-back
-components/Dashboard.tsx     Responsive, interactive product UI
+components/Dashboard.tsx     Responsive Timeline, courses, planner, and setup UI
 lib/
   notion.ts                  API 2026-03-11 adapter and schema mapping
   planner.ts                 Pure scoring and scheduling engine
@@ -192,10 +195,10 @@ Do not commit `.env.local` or expose a Notion token in screenshots.
 
 ## Hackathon submission checklist
 
-- [ ] Run the project and verify all four navigation sections.
+- [ ] Run the project and verify all five navigation sections.
 - [ ] Use Devin Chat for a real final task and update the Devin section above.
-- [ ] Add the final public GitHub URL to this README.
-- [ ] Push the repository publicly.
+- [x] Add the final public GitHub URL to this README.
+- [x] Push the repository publicly.
 - [ ] Submit your full name, Luma-registered email, and direct repository URL through the official form before 6:00 PM.
 
 ## Documentation references
