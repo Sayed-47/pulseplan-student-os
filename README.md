@@ -23,6 +23,8 @@ A due-date sort cannot account for a large assignment due in three days versus a
 - **Builds a seven-day plan** with 15–60 minute focus blocks, daily capacity limits, protected breaks, and a two-hour daily limit per assignment.
 - **Flags impossible weeks early** by showing work that cannot fit before its deadline.
 - **Writes focus blocks back to Notion** as Study Session pages.
+- **Adds an assignment-aware Study Bot** that can plan the day, rank priorities, and turn a difficult assignment into a concrete first step.
+- **Uses `gpt-4o-mini` when configured** and automatically falls back to the local risk engine without consuming API credits.
 - **Exports the plan to CSV** when write-back is not configured.
 - **Runs in demo mode automatically**, so judges can evaluate the complete workflow without access to a private workspace.
 
@@ -31,7 +33,7 @@ A due-date sort cannot account for a large assignment due in three days versus a
 PulsePlan complements the hackathon [Student OS workspace](https://app.notion.com/p/campusleaders/Student-OS-Build-Your-Campus-Life-with-Notion-41cd5368c6db80da906ec73c061b3cc6?source=copy_link). Notion remains the source of truth. PulsePlan adds a decision layer:
 
 ```text
-Student OS Assignments → normalize → risk score → capacity-aware plan → Study Sessions in Notion
+Student OS Assignments → normalize → risk score → capacity-aware plan → Study Bot → Study Sessions in Notion
 ```
 
 The adapter auto-detects common names such as `Name`, `Assignment`, `Due`, `Deadline`, `Course`, `Class`, `Status`, `Priority`, `Estimated hours`, and `Progress`. It follows Course relations to display the related page title. Environment variables can override every mapping, so the app does not depend on one exact template schema.
@@ -45,7 +47,8 @@ For the live hackathon workspace, the official Notion CLI provisioned a separate
 3. Open **Assignments** to inspect risk-ranked work and progress.
 4. Open **Courses** to compare each subject's current workload.
 5. Open **Study plan**, change daily capacity, complete a focus block, export CSV, or sync the plan to Notion.
-6. Open **Notion setup** to inspect live connection and write-back status.
+6. Open **Study bot** and ask for a daily plan, priority ranking, or a concrete first step.
+7. Open **Notion setup** to inspect live connection and write-back status.
 
 The interface follows the supplied Student Activities dashboard reference: a cyan icon rail, Timeline toolbar, subject cards, coral agenda, interactive blue calendar, and gradient activity panel.
 
@@ -105,6 +108,33 @@ NOTION_SESSIONS_DATA_SOURCE_ID=your_study_sessions_data_source_id
 
 The token is read only in server routes. It is never included in browser JavaScript or API responses.
 
+### Study Bot configuration
+
+![Pulse Study Bot using assignment context](./public/study-coach-preview.webp)
+
+The Study Bot works without an AI key by using PulsePlan's deterministic risk engine. To enable short AI-generated coaching, add a dedicated OpenAI API key:
+
+```dotenv
+OPENAI_API_KEY=sk-your-dedicated-key
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+`gpt-4o-mini` is used to limit cost. The server sends at most 20 normalized assignments and excludes Notion URLs, page content, and credentials.
+
+Security controls include:
+
+- Same-origin POST enforcement
+- JSON-only requests and a 2 KB body limit
+- A 400-character prompt limit
+- Eight requests per IP every ten minutes
+- A 20-second provider timeout
+- A fixed system instruction that treats assignment fields as untrusted data
+- A 450-token response limit
+- Sanitized provider errors and automatic local fallback
+
+If a credential has been pasted into chat, logs, or source control, rotate it before use. Configure production keys directly through the hosting provider's secret settings.
+
 ### Recommended Notion properties
 
 **Assignments**
@@ -155,11 +185,13 @@ The score is deterministic and capped at 100:
 ```text
 app/
   api/assignments/route.ts   Notion read endpoint with safe demo fallback
+  api/study-coach/route.ts   Rate-limited OpenAI-compatible coaching endpoint
   api/sync/route.ts          Validated Study Session write-back
-components/Dashboard.tsx     Responsive Timeline, courses, planner, and setup UI
+components/Dashboard.tsx     Responsive Timeline, courses, planner, Study Bot, and setup UI
 lib/
   notion.ts                  API 2026-03-11 adapter and schema mapping
   planner.ts                 Pure scoring and scheduling engine
+  study-coach.ts             Input validation, minimized context, and local fallback
   demo-data.ts               Date-relative judge demo
 ```
 
@@ -168,15 +200,16 @@ Notable implementation choices:
 - The planner is a pure TypeScript function, which makes it fast and testable.
 - Notion failures fall back to demo data with a visible warning instead of breaking the presentation.
 - Writes are validated and capped at 100 sessions per request.
-- Notion tokens remain server-side.
-- No database or AI API is required.
+- Notion tokens and AI keys remain server-side.
+- The Study Bot works without an AI key and restricts configured models to low-cost options.
 
 ## Verification
 
 | Layer | Result | Coverage |
 |---|---:|---|
-| Unit tests | 10 passed | Risk scoring, scheduling constraints, short remainders, and Notion status normalization |
-| Browser E2E | 22 passed | All five views, desktop/mobile navigation, filters, date controls, reminders, calendar, and planner interactions |
+| Unit tests | 14 passed | Risk scoring, scheduling constraints, Notion normalization, coach validation, context minimization, and fallback behavior |
+| Browser E2E | 25 passed | All six views, desktop/mobile navigation, filters, date controls, reminders, calendar, planner, and Study Bot interactions |
+| Study Bot API | Passed | Local fallback, OpenAI transport mock, low-cost model selection, same-origin enforcement, body and prompt limits, rate limiting, and secret minimization |
 | Production build | Passed | Next.js compilation, TypeScript, static generation, and API routes |
 | Heroku smoke test | Passed | Homepage HTTP 200, demo assignments response, and protected write endpoint |
 | Live Notion test | Passed | Six assignment reads, four Course relations, input validation, Study Session creation, and cleanup |
@@ -213,7 +246,7 @@ Do not commit `.env.local` or expose a Notion token in screenshots.
 
 ## Hackathon submission checklist
 
-- [x] Run the project and verify all five navigation sections.
+- [x] Run the project and verify all six navigation sections.
 - [x] Use Devin Chat for a real final review and document it above.
 - [x] Add the final public GitHub URL to this README.
 - [x] Push the repository publicly.
@@ -225,6 +258,8 @@ Do not commit `.env.local` or expose a Notion token in screenshots.
 - [Notion: Query a data source](https://developers.notion.com/reference/query-a-data-source)
 - [Notion: Create a page](https://developers.notion.com/reference/post-page)
 - [Notion: Connections and capabilities](https://developers.notion.com/reference/capabilities)
+- [OpenAI: GPT-4o mini model](https://platform.openai.com/docs/models/gpt-4o-mini)
+- [OpenAI API reference](https://developers.openai.com/api/reference)
 
 Documentation details were summarized and rephrased for licensing compliance.
 

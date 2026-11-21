@@ -7,7 +7,10 @@ import {
   Atom,
   BarChart3,
   Bell,
+  Bot,
   BookMarked,
+  BrainCircuit,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -21,13 +24,13 @@ import {
   Home,
   Info,
   LoaderCircle,
-  Mail,
   MapPin,
   MoreVertical,
   Newspaper,
   Play,
   RefreshCw,
   Search,
+  Send,
   Settings,
   ShieldCheck,
   Sigma,
@@ -47,9 +50,11 @@ import type {
   StudySession,
 } from "@/lib/types";
 
-type View = "timeline" | "assignments" | "courses" | "planner" | "settings";
+type View = "timeline" | "assignments" | "courses" | "planner" | "coach" | "settings";
 type CalendarMode = "Month View" | "Week View";
 type EventTab = "Activities" | "Reminders";
+type CoachAction = "daily-plan" | "priorities" | "get-started" | "ask";
+type CoachMessage = { id: number; role: "assistant" | "user"; text: string; meta?: string };
 
 const SUBJECT_ICONS = [Sigma, Globe2, BookMarked, Atom];
 const COURSE_COLORS = ["#149ed5", "#ffb757", "#59cda4", "#9497f5", "#ed83d8", "#ff8c8f"];
@@ -60,6 +65,7 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: "assignments", label: "Assignments", icon: Newspaper },
   { id: "courses", label: "Courses", icon: UsersRound },
   { id: "planner", label: "Study plan", icon: Play },
+  { id: "coach", label: "Study bot", icon: Bot },
   { id: "settings", label: "Notion setup", icon: Settings },
 ];
 
@@ -169,6 +175,16 @@ export function Dashboard() {
   const [completedSessions, setCompletedSessions] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [coachPrompt, setCoachPrompt] = useState("");
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachMessages, setCoachMessages] = useState<CoachMessage[]>([
+    {
+      id: 1,
+      role: "assistant",
+      text: "I’m Pulse, your assignment-aware study coach. I can turn the current workload into a focused plan or help you choose what to start next.",
+      meta: "Local planner ready",
+    },
+  ]);
 
   const loadAssignments = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
@@ -269,6 +285,64 @@ export function Dashboard() {
     }
   }
 
+  async function askCoach(action: CoachAction, suggestedPrompt?: string) {
+    if (coachLoading) return;
+    const prompt = (suggestedPrompt ?? coachPrompt).trim();
+    if (action === "ask" && !prompt) {
+      setToast("Ask the study bot a question first.");
+      return;
+    }
+    const labels: Record<CoachAction, string> = {
+      "daily-plan": "Build my plan for today",
+      priorities: "What should I prioritize?",
+      "get-started": "Help me get started",
+      ask: prompt,
+    };
+    const sentAt = Date.now();
+    setCoachMessages((messages) => [...messages, { id: sentAt, role: "user", text: labels[action] }]);
+    setCoachPrompt("");
+    setCoachLoading(true);
+    try {
+      const coachResponse = await fetch("/api/study-coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, prompt }),
+      });
+      const payload = (await coachResponse.json()) as {
+        reply?: string;
+        error?: string;
+        mode?: "ai" | "planner";
+        model?: string;
+        notice?: string;
+      };
+      if (!coachResponse.ok || !payload.reply) {
+        throw new Error(payload.error ?? "The study bot could not respond.");
+      }
+      setCoachMessages((messages) => [
+        ...messages,
+        {
+          id: sentAt + 1,
+          role: "assistant",
+          text: payload.reply!,
+          meta: payload.mode === "ai" ? `AI · ${payload.model}` : "Local risk engine · no API credits used",
+        },
+      ]);
+      if (payload.notice) setToast(payload.notice);
+    } catch (error) {
+      setCoachMessages((messages) => [
+        ...messages,
+        {
+          id: sentAt + 1,
+          role: "assistant",
+          text: error instanceof Error ? error.message : "The study bot is temporarily unavailable.",
+          meta: "Request failed safely",
+        },
+      ]);
+    } finally {
+      setCoachLoading(false);
+    }
+  }
+
   if (loading && !data) {
     return <main className="loading-screen"><Logo /><LoaderCircle className="spin" size={28} /><p>Syncing your Student OS…</p></main>;
   }
@@ -282,9 +356,10 @@ export function Dashboard() {
         <div className="logo-cell"><Logo /></div>
         <div className="profile-cell"><span>AS</span><strong>Abu Sayed</strong></div>
         <nav aria-label="Primary navigation">
-          {navItems.slice(0, 3).map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => setActiveView(item.id)} aria-label={item.label} title={item.label}><Icon size={23} /></button>; })}
-          <button className={activeView === "timeline" && eventTab === "Reminders" ? "active" : ""} onClick={() => { setActiveView("timeline"); setEventTab("Reminders"); }} aria-label="Reminders" title="Reminders"><Mail size={22} /></button>
-          {navItems.slice(3, 4).map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => setActiveView(item.id)} aria-label={item.label} title={item.label}><Icon size={23} /></button>; })}
+          {navItems.filter((item) => item.id !== "settings").map((item) => {
+            const Icon = item.icon;
+            return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => setActiveView(item.id)} aria-label={item.label} title={item.label}><Icon size={23} /></button>;
+          })}
           <button aria-label="Insights" title="Insights" onClick={() => setActiveView("assignments")}><BarChart3 size={22} /></button>
         </nav>
         <button className={`settings-link ${activeView === "settings" ? "active" : ""}`} onClick={() => setActiveView("settings")} aria-label="Notion setup" title="Notion setup"><Settings size={23} /></button>
@@ -368,6 +443,30 @@ export function Dashboard() {
           </main>
         ) : null}
 
+        {activeView === "coach" ? (
+          <main className="workspace-view coach-view">
+            <div className="view-heading"><div><h2>Pulse Study Bot</h2><p>Assignment-aware guidance with a low-cost AI model and a local fallback.</p></div><span><ShieldCheck size={13} />Secure mode</span></div>
+            <div className="coach-layout">
+              <section className="coach-chat">
+                <header><span><Bot size={22} /></span><div><strong>Pulse coach</strong><small>Reads normalized assignments, never page content</small></div><i className={coachLoading ? "thinking" : ""} /></header>
+                <div className="coach-messages" aria-live="polite">
+                  {coachMessages.map((message) => <article key={message.id} className={message.role}><span>{message.role === "assistant" ? <Bot size={16} /> : "AS"}</span><div><p>{message.text}</p>{message.meta ? <small>{message.meta}</small> : null}</div></article>)}
+                  {coachLoading ? <article className="assistant typing"><span><Bot size={16} /></span><div><i /><i /><i /></div></article> : null}
+                </div>
+                <div className="coach-actions"><button onClick={() => void askCoach("daily-plan")}><CalendarDays size={14} />Plan my day</button><button onClick={() => void askCoach("priorities")}><BarChart3 size={14} />Set priorities</button><button onClick={() => void askCoach("get-started")}><Play size={14} />Help me start</button></div>
+                <form className="coach-input" onSubmit={(event) => { event.preventDefault(); void askCoach("ask"); }}><textarea value={coachPrompt} onChange={(event) => setCoachPrompt(event.target.value)} maxLength={400} rows={2} placeholder="Ask about your workload, deadlines, or study plan…" /><span>{coachPrompt.length}/400</span><button type="submit" disabled={coachLoading || !coachPrompt.trim()} aria-label="Send question"><Send size={17} /></button></form>
+              </section>
+              <aside className="coach-context">
+                <div className="coach-context-head"><BrainCircuit size={19} /><div><strong>What Pulse sees</strong><small>Only the fields needed to plan</small></div></div>
+                <dl><div><dt>Active assignments</dt><dd>{openRisks.length}</dd></div><div><dt>Critical items</dt><dd>{openRisks.filter((item) => item.riskScore >= 70).length}</dd></div><div><dt>Focus scheduled</dt><dd>{formatDuration(plan.totalPlannedMinutes)}</dd></div></dl>
+                <h3>Highest priorities</h3>
+                <ol>{openRisks.slice(0, 3).map((item) => <li key={item.id}><span style={{ background: courseColor(item.course) }}>{courseCode(item.course).slice(0, 2)}</span><div><strong>{item.title}</strong><small>{dueLabel(item.dueDate)} · risk {item.riskScore}</small></div></li>)}</ol>
+                <div className="coach-security"><ShieldCheck size={16} /><p>Prompts are limited, rate-limited, and processed server-side. Assignment URLs and Notion credentials are never sent to the model.</p></div>
+              </aside>
+            </div>
+          </main>
+        ) : null}
+
         {activeView === "settings" ? (
           <main className="workspace-view">
             <div className="view-heading"><div><h2>Notion integration</h2><p>PulsePlan reads assignments and writes generated study sessions.</p></div><span className={data.meta.connected ? "connected" : ""}>{data.meta.connected ? "Connected" : "Demo mode"}</span></div>
@@ -386,7 +485,7 @@ export function Dashboard() {
         <footer><span className={`connection-dot ${data.meta.connected ? "live" : ""}`} /><strong>{data.meta.connected ? "Live from Notion" : "Demo workspace"}</strong><button onClick={() => setActiveView("settings")}>Manage</button></footer>
       </aside>
 
-      <nav className="mobile-nav">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => setActiveView(item.id)}><Icon size={18} /><span>{item.label.split(" ")[0]}</span></button>; })}</nav>
+      <nav className="mobile-nav">{navItems.map((item) => { const Icon = item.icon; const mobileLabel = item.id === "planner" ? "Plan" : item.id === "coach" ? "Coach" : item.label.split(" ")[0]; return <button key={item.id} aria-label={item.label} className={activeView === item.id ? "active" : ""} onClick={() => setActiveView(item.id)}><Icon size={18} /><span>{mobileLabel}</span></button>; })}</nav>
       {toast ? <div className="toast"><CheckCircle2 size={16} /><span>{toast}</span><button onClick={() => setToast(null)}><X size={14} /></button></div> : null}
     </div>
   );
