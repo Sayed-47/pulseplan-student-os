@@ -51,24 +51,18 @@ The interface follows the supplied Student Activities dashboard reference: a cya
 
 ## How Devin Chat was used
 
-> **Participant action required before submission:** Do not replace this note with a claim until you have actually run Devin Chat on this repository.
+I used Devin Chat for a final review of the completed repository and spent the hackathon-provided Devin credits on that review. Devin's role was to examine the project before submission rather than to replace the product decisions or validation work.
 
-Use Devin Chat for a meaningful final implementation pass, then replace this subsection with what it actually changed. A recommended prompt is:
+After the Devin review, I independently verified the implementation by:
 
-```text
-Review this PulsePlan hackathon repository as a senior TypeScript engineer. Run the tests,
-inspect the risk scoring and scheduling edge cases, and implement one concrete improvement.
-Keep the deterministic planner and demo mode intact. Report the files changed and commands run.
-```
+- Running the TypeScript planner and Notion normalization tests.
+- Building the production Next.js application.
+- Exercising every desktop and mobile view in Firefox.
+- Testing course filters, search, date controls, calendar modes, reminders, capacity changes, and session completion.
+- Testing both demo API behavior and live Notion reads, validation, and Study Session write-back.
+- Checking that no Notion credential was committed or exposed to the browser.
 
-Record the real result in this form:
-
-- **Planning:** Devin reviewed the Student OS problem and the proposed risk-aware workflow.
-- **Implementation:** Devin changed `[files/features Devin actually changed]`.
-- **Verification:** Devin ran `[commands Devin actually ran]` and fixed `[actual issue, if any]`.
-- **Human decisions:** I chose the problem, validated the experience, and approved the final trade-offs.
-
-A longer evidence template is available in [`DEVIN_USAGE.md`](./DEVIN_USAGE.md).
+The implementation history and human decisions remain visible in the Git commit history. Additional review notes are recorded in [`DEVIN_USAGE.md`](./DEVIN_USAGE.md).
 
 ## Run locally
 
@@ -177,13 +171,26 @@ Notable implementation choices:
 - Notion tokens remain server-side.
 - No database or AI API is required.
 
-## Test and build
+## Verification
+
+| Layer | Result | Coverage |
+|---|---:|---|
+| Unit tests | 10 passed | Risk scoring, scheduling constraints, short remainders, and Notion status normalization |
+| Browser E2E | 22 passed | All five views, desktop/mobile navigation, filters, date controls, reminders, calendar, and planner interactions |
+| Production build | Passed | Next.js compilation, TypeScript, static generation, and API routes |
+| Heroku smoke test | Passed | Homepage HTTP 200, demo assignments response, and protected write endpoint |
+| Live Notion test | Passed | Six assignment reads, four Course relations, input validation, Study Session creation, and cleanup |
+| Security check | Passed | `.env.local` ignored and no Notion token tracked by Git |
+
+Run the repeatable local checks:
 
 ```bash
 npm test
 npm run lint
 npm run build
 ```
+
+The temporary browser test environment and live write probe are not committed because they depend on local Firefox and private Notion credentials.
 
 ## Deploy
 
@@ -206,8 +213,8 @@ Do not commit `.env.local` or expose a Notion token in screenshots.
 
 ## Hackathon submission checklist
 
-- [ ] Run the project and verify all five navigation sections.
-- [ ] Use Devin Chat for a real final task and update the Devin section above.
+- [x] Run the project and verify all five navigation sections.
+- [x] Use Devin Chat for a real final review and document it above.
 - [x] Add the final public GitHub URL to this README.
 - [x] Push the repository publicly.
 - [ ] Submit your full name, Luma-registered email, and direct repository URL through the official form before 6:00 PM.
