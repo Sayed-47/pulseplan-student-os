@@ -8,6 +8,8 @@ PulsePlan reads assignments from Notion, explains which deadlines are becoming r
 
 > Built for the Cognition × Notion Student OS Hackathon.
 
+**Live demo:** [pulseplan-student-os-076ade555e28.herokuapp.com](https://pulseplan-student-os-076ade555e28.herokuapp.com/)
+
 ## The problem
 
 A Student OS is excellent at storing classes, assignments, and deadlines. A busy student still has to answer a harder question every day: **what should I work on now, and will everything fit before it is due?**
@@ -185,7 +187,16 @@ npm run build
 
 ## Deploy
 
-The quickest option is Vercel:
+The public demo is deployed on Heroku:
+
+- [https://pulseplan-student-os-076ade555e28.herokuapp.com/](https://pulseplan-student-os-076ade555e28.herokuapp.com/)
+- Region: EU
+- Stack: Heroku-24
+- Process: `web: npm start`
+
+The deployment runs in demo mode unless dedicated Notion integration credentials are added through Heroku Config Vars. Do not deploy a broad personal Notion CLI token.
+
+You can also deploy through Vercel:
 
 1. Import the public GitHub repository.
 2. Keep all environment variables blank for a public demo, or add the Notion variables in project settings for live mode.
