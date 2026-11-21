@@ -3,20 +3,22 @@
 import {
   AlertCircle,
   ArrowRight,
-  BookOpen,
   BrainCircuit,
   CalendarDays,
   Check,
   CheckCircle2,
   ChevronRight,
-  CircleGauge,
   Clock3,
   Cloud,
   Download,
   ExternalLink,
   FileText,
+  GraduationCap,
+  Home,
   Info,
-  LayoutDashboard,
+  Library,
+  Link2,
+  ListTodo,
   LoaderCircle,
   Menu,
   RefreshCw,
@@ -29,6 +31,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildStudyPlan,
@@ -44,12 +47,12 @@ import type {
 type View = "overview" | "plan" | "assignments" | "integration";
 type RiskFilter = "all" | "needs-attention" | "on-track";
 
-const COURSE_COLORS = ["#6d5dfc", "#e37047", "#168a72", "#ba4d78", "#2672c9", "#9a6a12"];
+const COURSE_COLORS = ["#a75f3f", "#657f68", "#687b96", "#94748b", "#a98545", "#6e8584"];
 
-const navItems: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
+const navItems: { id: View; label: string; icon: typeof Home }[] = [
+  { id: "overview", label: "Dashboard", icon: Home },
   { id: "plan", label: "Study plan", icon: CalendarDays },
-  { id: "assignments", label: "Assignments", icon: BookOpen },
+  { id: "assignments", label: "Assignments", icon: ListTodo },
   { id: "integration", label: "Notion setup", icon: Settings2 },
 ];
 
@@ -116,43 +119,38 @@ function exportSessions(sessions: StudySession[]) {
   URL.revokeObjectURL(url);
 }
 
-function Logo() {
+function Brand() {
   return (
     <div className="brand" aria-label="PulsePlan">
-      <span className="brand-mark"><BrainCircuit size={21} /></span>
-      <span className="brand-name">pulse<span>plan</span></span>
+      <span className="brand-mark"><BrainCircuit size={18} /></span>
+      <strong>PulsePlan</strong>
+    </div>
+  );
+}
+
+function SectionTitle({ label, title, action }: { label: string; title: string; action?: React.ReactNode }) {
+  return (
+    <div className="section-title">
+      <div><p>{label}</p><h2>{title}</h2></div>
+      {action}
     </div>
   );
 }
 
 function RiskPill({ risk }: { risk: AssignmentRisk }) {
   if (risk.riskLevel === "complete") {
-    return <span className="risk-pill complete"><CheckCircle2 size={13} /> Complete</span>;
+    return <span className="risk-pill complete"><CheckCircle2 size={12} /> Complete</span>;
   }
   const labels = { critical: "Act now", "at-risk": "At risk", steady: "On track" };
-  return (
-    <span className={`risk-pill ${scoreTone(risk.riskScore)}`}>
-      <span className="risk-dot" /> {labels[risk.riskLevel]}
-    </span>
-  );
-}
-
-function EmptyState({ title, copy }: { title: string; copy: string }) {
-  return (
-    <div className="empty-state">
-      <span><CheckCircle2 size={22} /></span>
-      <strong>{title}</strong>
-      <p>{copy}</p>
-    </div>
-  );
+  return <span className={`risk-pill ${scoreTone(risk.riskScore)}`}><i />{labels[risk.riskLevel]}</span>;
 }
 
 function LoadingScreen() {
   return (
     <main className="loading-screen">
-      <Logo />
-      <div className="loading-orbit"><BrainCircuit size={28} /></div>
-      <p>Turning deadlines into a workable week…</p>
+      <Brand />
+      <div className="loading-icon"><GraduationCap size={28} /></div>
+      <p>Opening your university dashboard…</p>
     </main>
   );
 }
@@ -192,20 +190,12 @@ export function Dashboard() {
         if (!response.ok) throw new Error("Could not load assignment data");
         return response.json() as Promise<AssignmentsResponse>;
       })
-      .then((payload) => {
-        if (!cancelled) setData(payload);
-      })
+      .then((payload) => { if (!cancelled) setData(payload); })
       .catch((error: unknown) => {
-        if (!cancelled) {
-          setToast(error instanceof Error ? error.message : "Could not load PulsePlan");
-        }
+        if (!cancelled) setToast(error instanceof Error ? error.message : "Could not load PulsePlan");
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -218,32 +208,40 @@ export function Dashboard() {
     () => buildStudyPlan(data?.assignments ?? [], { dailyCapacityMinutes: dailyHours * 60 }),
     [data?.assignments, dailyHours],
   );
-
-  const allSessions = useMemo(
-    () => plan.days.flatMap((day) => day.sessions),
-    [plan.days],
-  );
+  const allSessions = useMemo(() => plan.days.flatMap((day) => day.sessions), [plan.days]);
   const openRisks = plan.risks.filter((risk) => risk.riskLevel !== "complete");
   const urgentRisks = openRisks.filter((risk) => risk.riskScore >= 70);
+  const topRisk = openRisks[0];
   const dueThisWeek = openRisks.filter((risk) => {
     const days = calendarDaysBetween(new Date(), risk.dueDate);
     return days >= 0 && days <= 7;
   });
-  const topRisk = openRisks[0];
-  const totalEstimate = data?.assignments.reduce((sum, item) => sum + item.estimatedMinutes, 0) ?? 0;
-  const totalCompleted = data?.assignments.reduce((sum, item) => sum + item.completedMinutes, 0) ?? 0;
-  const completion = totalEstimate ? Math.round((totalCompleted / totalEstimate) * 100) : 0;
   const unscheduledTotal = Object.values(plan.unscheduledMinutes).reduce((sum, minutes) => sum + minutes, 0);
+  const courseSummaries = useMemo(() => {
+    const grouped = new Map<string, { assignments: number; nextDue?: string }>();
+    for (const item of data?.assignments ?? []) {
+      const current = grouped.get(item.course) ?? { assignments: 0 };
+      current.assignments += item.status === "Done" ? 0 : 1;
+      if (item.status !== "Done" && (!current.nextDue || item.dueDate < current.nextDue)) current.nextDue = item.dueDate;
+      grouped.set(item.course, current);
+    }
+    return [...grouped.entries()].map(([course, value]) => ({ course, ...value }));
+  }, [data?.assignments]);
 
   const filteredRisks = plan.risks.filter((risk) => {
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || risk.title.toLowerCase().includes(query) || risk.course.toLowerCase().includes(query);
-    const matchesFilter =
-      filter === "all" ||
+    const matchesFilter = filter === "all" ||
       (filter === "needs-attention" && risk.riskScore >= 45 && risk.riskLevel !== "complete") ||
       (filter === "on-track" && (risk.riskScore < 45 || risk.riskLevel === "complete"));
     return matchesSearch && matchesFilter;
   });
+
+  function navigate(view: View) {
+    setActiveView(view);
+    setMenuOpen(false);
+    window.scrollTo({ top: 250, behavior: "smooth" });
+  }
 
   function toggleSession(id: string) {
     setCompletedSessions((current) => {
@@ -256,13 +254,13 @@ export function Dashboard() {
 
   async function syncPlan() {
     if (!data?.meta.writeEnabled) {
-      setActiveView("integration");
+      navigate("integration");
       setToast("Complete the Notion write-back setup first.");
       return;
     }
-    const sessions = allSessions.filter((session) => !completedSessions.has(session.id));
     setSyncing(true);
     try {
+      const sessions = allSessions.filter((session) => !completedSessions.has(session.id));
       const response = await fetch("/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -278,270 +276,140 @@ export function Dashboard() {
     }
   }
 
-  function navigate(view: View) {
-    setActiveView(view);
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
   if (loading && !data) return <LoadingScreen />;
   if (!data) {
-    return (
-      <main className="fatal-state">
-        <AlertCircle size={28} />
-        <h1>PulsePlan could not start</h1>
-        <button className="primary-button" onClick={() => void loadAssignments()}>Try again</button>
-      </main>
-    );
+    return <main className="fatal-state"><AlertCircle /><h1>PulsePlan could not start</h1><button onClick={() => void loadAssignments()}>Try again</button></main>;
   }
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <div className="sidebar-head">
-          <Logo />
-          <button className="icon-button close-menu" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={19} /></button>
+      <header className="app-topbar">
+        <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu size={19} /></button>
+        <Brand />
+        <div className="breadcrumbs"><span>Student OS</span><ChevronRight size={13} /><strong>{navItems.find((item) => item.id === activeView)?.label}</strong></div>
+        <div className="top-actions">
+          <span className={`source-badge ${data.meta.connected ? "live" : ""}`}><i />{data.meta.connected ? "Notion live" : "Demo data"}</span>
+          <button className="icon-button" onClick={() => void loadAssignments(true)} disabled={refreshing} aria-label="Refresh data"><RefreshCw size={16} className={refreshing ? "spin" : ""} /></button>
+          <span className="avatar">AS</span>
         </div>
-        <div className="workspace-pill">
-          <span className="workspace-avatar">S</span>
-          <span><small>Workspace</small><strong>Student OS</strong></span>
-          <ChevronRight size={16} />
-        </div>
-        <nav className="side-nav" aria-label="Main navigation">
-          <p>Workspace</p>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}>
-                <Icon size={18} />
-                <span>{item.label}</span>
-                {item.id === "assignments" && urgentRisks.length > 0 ? <em>{urgentRisks.length}</em> : null}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="sidebar-tip">
-          <span><Sparkles size={16} /></span>
-          <div><strong>Planning insight</strong><p>{formatDuration(plan.totalPlannedMinutes)} of focused work mapped this week.</p></div>
-        </div>
-        <div className="connection-card">
-          <span className={`connection-icon ${data.meta.connected ? "connected" : ""}`}>
-            {data.meta.connected ? <Cloud size={17} /> : <Unplug size={17} />}
-          </span>
-          <div><strong>{data.meta.connected ? "Notion connected" : "Demo workspace"}</strong><small>{data.meta.connected ? `${data.meta.assignmentCount} assignments synced` : "Safe sample data"}</small></div>
-          <span className={`live-dot ${data.meta.connected ? "online" : ""}`} />
-        </div>
-      </aside>
+      </header>
 
-      {menuOpen ? <button className="menu-scrim" onClick={() => setMenuOpen(false)} aria-label="Close menu" /> : null}
-
-      <section className="main-column">
-        <header className="topbar">
-          <button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
-          <div className="topbar-context"><span>Student OS</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === activeView)?.label}</strong></div>
-          <div className="topbar-actions">
-            <span className={`source-badge ${data.meta.connected ? "live" : ""}`}><span />{data.meta.connected ? "Live data" : "Demo mode"}</span>
-            <button className="icon-button" onClick={() => void loadAssignments(true)} disabled={refreshing} aria-label="Refresh assignments">
-              <RefreshCw size={18} className={refreshing ? "spin" : ""} />
-            </button>
-            <span className="user-avatar">SM</span>
-          </div>
-        </header>
-
-        <main className="content">
-          {data.notice ? (
-            <div className="notice-banner"><Info size={17} /><span>{data.notice}</span><button onClick={() => navigate("integration")}>Setup guide <ArrowRight size={14} /></button></div>
-          ) : null}
-
-          {activeView === "overview" ? (
-            <>
-              <section className="page-heading">
-                <div><p className="eyebrow">{greeting()}</p><h1>Your week, under control.</h1><p>PulsePlan translated {openRisks.length} active assignments into the next best actions.</p></div>
-                <button className="primary-button" onClick={() => navigate("plan")}><CalendarDays size={17} /> Open study plan</button>
-              </section>
-
-              {topRisk ? (
-                <section className="briefing-card">
-                  <div className="briefing-copy">
-                    <p className="briefing-label"><Sparkles size={14} /> Smart briefing</p>
-                    <h2>{topRisk.riskScore >= 70 ? "Start here to protect your week." : "Your workload is in a healthy range."}</h2>
-                    <p><strong>{topRisk.title}</strong> has {formatDuration(topRisk.remainingMinutes)} left and is {dueText(topRisk.dueDate).toLowerCase()}. PulsePlan reserved its first focus block in your schedule.</p>
-                    <div className="briefing-actions">
-                      <button onClick={() => navigate("plan")}>See the focus block <ArrowRight size={15} /></button>
-                      {topRisk.url ? <a href={topRisk.url} target="_blank" rel="noreferrer">Open source <ExternalLink size={14} /></a> : null}
-                    </div>
-                  </div>
-                  <div className="risk-orbit" style={{ "--score": topRisk.riskScore } as React.CSSProperties}>
-                    <div><strong>{topRisk.riskScore}</strong><span>risk score</span></div>
-                    <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" /><circle className="score-ring" cx="60" cy="60" r="52" pathLength="100" /></svg>
-                  </div>
-                </section>
-              ) : <EmptyState title="Everything is complete" copy="Your Student OS has no unfinished assignments." />}
-
-              <section className="metric-grid" aria-label="Weekly summary">
-                <article className="metric-card"><span className="metric-icon purple"><Zap size={19} /></span><div><p>Needs attention</p><strong>{urgentRisks.length}</strong><small>{urgentRisks.length ? "Prioritized by urgency and effort" : "No critical work"}</small></div></article>
-                <article className="metric-card"><span className="metric-icon orange"><Clock3 size={19} /></span><div><p>Focus scheduled</p><strong>{formatDuration(plan.totalPlannedMinutes)}</strong><small>Across {plan.days.filter((day) => day.sessions.length).length} active days</small></div></article>
-                <article className="metric-card"><span className="metric-icon green"><Target size={19} /></span><div><p>Due this week</p><strong>{dueThisWeek.length}</strong><small>{unscheduledTotal ? `${formatDuration(unscheduledTotal)} needs capacity` : "All work has capacity"}</small></div></article>
-                <article className="metric-card"><span className="metric-icon blue"><CircleGauge size={19} /></span><div><p>Overall progress</p><strong>{completion}%</strong><small>Across tracked workload</small></div></article>
-              </section>
-
-              <section className="overview-grid">
-                <article className="panel workload-panel">
-                  <div className="panel-heading"><div><p className="eyebrow">Capacity map</p><h2>Your next 7 days</h2></div><span className="legend"><i /> Planned work</span></div>
-                  <div className="week-bars">
-                    {plan.days.map((day) => {
-                      const percent = Math.round((day.plannedMinutes / day.capacityMinutes) * 100);
-                      const date = dayDate(day.date);
-                      return (
-                        <div className="bar-column" key={day.date}>
-                          <div className="bar-value">{day.plannedMinutes ? formatDuration(day.plannedMinutes) : "Free"}</div>
-                          <div className="bar-track"><span style={{ height: `${Math.max(4, percent)}%` }} className={percent >= 95 ? "full" : ""} /></div>
-                          <strong>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date).slice(0, 2)}</strong>
-                          <small>{date.getDate()}</small>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="capacity-note"><ShieldCheck size={16} /><span>The plan protects breaks and limits each assignment to two hours per day.</span></div>
-                </article>
-
-                <article className="panel focus-panel">
-                  <div className="panel-heading"><div><p className="eyebrow">Priority queue</p><h2>What deserves focus</h2></div><button className="text-button" onClick={() => navigate("assignments")}>View all <ArrowRight size={14} /></button></div>
-                  <div className="focus-list">
-                    {openRisks.slice(0, 4).map((risk, index) => (
-                      <div className="focus-item" key={risk.id}>
-                        <span className="focus-number">{String(index + 1).padStart(2, "0")}</span>
-                        <span className="course-line" style={{ background: courseColor(risk.course) }} />
-                        <div className="focus-main"><strong>{risk.title}</strong><p>{risk.course} · {risk.reasons.slice(0, 2).join(" · ")}</p></div>
-                        <div className={`mini-score ${scoreTone(risk.riskScore)}`}><strong>{risk.riskScore}</strong><span>risk</span></div>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              </section>
-            </>
-          ) : null}
-
-          {activeView === "plan" ? (
-            <>
-              <section className="page-heading plan-heading">
-                <div><p className="eyebrow">Adaptive study plan</p><h1>A realistic path through the week.</h1><p>Focus blocks stop at your daily capacity and move urgent work forward.</p></div>
-                <div className="heading-actions">
-                  <button className="secondary-button" onClick={() => exportSessions(allSessions)}><Download size={16} /> Export CSV</button>
-                  <button className="primary-button" onClick={() => void syncPlan()} disabled={syncing}>
-                    {syncing ? <LoaderCircle className="spin" size={16} /> : <Cloud size={16} />} {data.meta.writeEnabled ? "Sync to Notion" : "Connect Notion"}
-                  </button>
-                </div>
-              </section>
-
-              <section className="plan-control panel">
-                <div><span className="metric-icon purple"><Clock3 size={18} /></span><div><strong>Daily focus capacity</strong><p>Weekends automatically get one extra hour.</p></div></div>
-                <div className="capacity-picker" role="group" aria-label="Daily focus capacity">
-                  {[2, 3, 4, 5].map((hours) => <button key={hours} className={dailyHours === hours ? "active" : ""} onClick={() => setDailyHours(hours)}>{hours}h</button>)}
-                </div>
-              </section>
-
-              {unscheduledTotal > 0 ? (
-                <div className="overload-banner"><AlertCircle size={19} /><div><strong>This week needs {formatDuration(unscheduledTotal)} more capacity.</strong><p>Increase daily focus time or renegotiate the lowest-priority deadline.</p></div><button onClick={() => setDailyHours((hours) => Math.min(5, hours + 1))}>Add capacity</button></div>
-              ) : (
-                <div className="healthy-banner"><CheckCircle2 size={19} /><div><strong>Every deadline fits.</strong><p>The plan has enough room for all tracked work due in this window.</p></div></div>
-              )}
-
-              <section className="calendar-board">
-                {plan.days.map((day, index) => {
-                  const date = dayDate(day.date);
-                  const dayName = new Intl.DateTimeFormat("en", { weekday: "short" }).format(date);
-                  const isToday = index === 0;
-                  return (
-                    <article className={`day-column ${isToday ? "today" : ""}`} key={day.date}>
-                      <header><div><span>{dayName}</span>{isToday ? <em>Today</em> : null}</div><strong>{date.getDate()}</strong><small>{formatDuration(day.plannedMinutes)} / {formatDuration(day.capacityMinutes)}</small></header>
-                      <div className="day-progress"><span style={{ width: `${Math.min(100, (day.plannedMinutes / day.capacityMinutes) * 100)}%` }} /></div>
-                      <div className="session-stack">
-                        {day.sessions.length ? day.sessions.map((session) => {
-                          const complete = completedSessions.has(session.id);
-                          return (
-                            <button className={`session-card ${complete ? "done" : ""}`} key={session.id} onClick={() => toggleSession(session.id)} style={{ borderLeftColor: courseColor(session.course) }}>
-                              <span className="session-time">{session.startTime}</span>
-                              <strong>{session.title}</strong>
-                              <small>{session.course}</small>
-                              <span className="session-meta"><Clock3 size={12} /> {formatDuration(session.durationMinutes)}<i>{complete ? <Check size={11} /> : null}</i></span>
-                            </button>
-                          );
-                        }) : <div className="rest-day"><Sparkles size={17} /><span>Open capacity</span><small>Room for rest or review</small></div>}
-                      </div>
-                    </article>
-                  );
-                })}
-              </section>
-              <p className="calendar-hint"><Info size={14} /> Select a focus block to mark it complete locally. Changes reset when the page reloads.</p>
-            </>
-          ) : null}
-
-          {activeView === "assignments" ? (
-            <>
-              <section className="page-heading">
-                <div><p className="eyebrow">Risk-ranked assignments</p><h1>See pressure before it becomes panic.</h1><p>Every score is calculated from deadline, remaining effort, priority, and momentum.</p></div>
-              </section>
-              <section className="assignment-tools panel">
-                <label className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assignment or course" /></label>
-                <div className="filter-tabs">
-                  {(["all", "needs-attention", "on-track"] as RiskFilter[]).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "needs-attention" ? "Needs attention" : "On track"}</button>)}
-                </div>
-              </section>
-              <section className="assignment-list panel">
-                <div className="assignment-list-head"><span>Assignment</span><span>Due</span><span>Work left</span><span>Risk</span><span>Status</span></div>
-                {filteredRisks.length ? filteredRisks.map((risk) => (
-                  <article className="assignment-row" key={risk.id}>
-                    <div className="assignment-name"><span className="course-icon" style={{ background: `${courseColor(risk.course)}18`, color: courseColor(risk.course) }}><FileText size={17} /></span><div><strong>{risk.title}</strong><small><i style={{ background: courseColor(risk.course) }} />{risk.course} · {risk.priority} priority</small></div></div>
-                    <div className={`due-cell ${calendarDaysBetween(new Date(), risk.dueDate) <= 1 && risk.riskLevel !== "complete" ? "urgent" : ""}`}><strong>{dueText(risk.dueDate)}</strong><small>{formatDate(risk.dueDate, { month: "short", day: "numeric", year: "numeric" })}</small></div>
-                    <div className="effort-cell"><strong>{formatDuration(risk.remainingMinutes)}</strong><span><i style={{ width: `${Math.min(100, risk.estimatedMinutes ? (risk.completedMinutes / risk.estimatedMinutes) * 100 : 0)}%` }} /></span></div>
-                    <div className={`score-cell ${scoreTone(risk.riskScore)}`}><strong>{risk.riskScore}</strong><span>/{100}</span></div>
-                    <div><RiskPill risk={risk} /></div>
-                    <details className="risk-details"><summary><ChevronRight size={16} /> Why this score?</summary><div><span><b>{risk.breakdown.urgency}</b> Deadline</span><span><b>{risk.breakdown.workload}</b> Workload</span><span><b>{risk.breakdown.importance}</b> Priority</span><span><b>{risk.breakdown.inertia}</b> Momentum</span></div></details>
-                  </article>
-                )) : <EmptyState title="No assignments found" copy="Try another search or filter." />}
-              </section>
-              <section className="explain-panel panel"><span><BrainCircuit size={22} /></span><div><p className="eyebrow">Transparent by design</p><h2>No black-box recommendations</h2><p>PulsePlan uses a deterministic 100-point score. Deadline contributes up to 48 points, workload pressure up to 26, priority up to 22, and starting inertia up to 8. Completed work always scores zero.</p></div></section>
-            </>
-          ) : null}
-
-          {activeView === "integration" ? (
-            <>
-              <section className="page-heading">
-                <div><p className="eyebrow">Notion integration</p><h1>Connect your Student OS in minutes.</h1><p>Your API key stays on the server and is never exposed to the browser.</p></div>
-                <span className={`large-status ${data.meta.connected ? "connected" : ""}`}>{data.meta.connected ? <Cloud size={18} /> : <Unplug size={18} />}{data.meta.connected ? "Connected" : "Demo mode"}</span>
-              </section>
-              <section className="setup-grid">
-                <article className="panel setup-steps">
-                  <div className="panel-heading"><div><p className="eyebrow">Setup</p><h2>Bring your assignments to life</h2></div></div>
-                  <ol>
-                    <li><span>1</span><div><strong>Create a Notion integration</strong><p>Give it Read content access. Add Insert content access if you want study-plan write-back.</p><a href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">Open integrations <ExternalLink size={13} /></a></div></li>
-                    <li><span>2</span><div><strong>Share both data sources</strong><p>Open each Notion database, select Connections, and add your integration.</p></div></li>
-                    <li><span>3</span><div><strong>Configure local secrets</strong><p>Copy <code>.env.example</code> to <code>.env.local</code> and add the token and data-source IDs.</p><pre>NOTION_API_KEY=ntn_••••••••\nNOTION_ASSIGNMENTS_DATA_SOURCE_ID=••••\nNOTION_SESSIONS_DATA_SOURCE_ID=••••</pre></div></li>
-                    <li><span>4</span><div><strong>Restart PulsePlan</strong><p>The source badge will change to Live data. Common property names are detected automatically.</p></div></li>
-                  </ol>
-                </article>
-                <div className="setup-side">
-                  <article className="panel schema-card">
-                    <div className="panel-heading"><div><p className="eyebrow">Recommended schema</p><h2>Assignments</h2></div><BookOpen size={20} /></div>
-                    <dl><div><dt>Name</dt><dd>Title · required</dd></div><div><dt>Due</dt><dd>Date · required</dd></div><div><dt>Status</dt><dd>Status or checkbox</dd></div><div><dt>Course</dt><dd>Select or text</dd></div><div><dt>Estimated hours</dt><dd>Number</dd></div><div><dt>Priority</dt><dd>Select</dd></div><div><dt>Progress</dt><dd>Number, 0–100</dd></div></dl>
-                  </article>
-                  <article className="panel schema-card">
-                    <div className="panel-heading"><div><p className="eyebrow">For write-back</p><h2>Study Sessions</h2></div><CalendarDays size={20} /></div>
-                    <dl><div><dt>Name</dt><dd>Title · required</dd></div><div><dt>Date</dt><dd>Date · required</dd></div><div><dt>Course</dt><dd>Select or text</dd></div><div><dt>Duration</dt><dd>Number, minutes</dd></div><div><dt>Status</dt><dd>Status</dd></div><div><dt>Source</dt><dd>URL</dd></div></dl>
-                  </article>
-                  <article className="security-card"><ShieldCheck size={21} /><div><strong>Server-side by default</strong><p>The browser only receives normalized assignment fields. PulsePlan never returns your Notion token.</p></div></article>
-                </div>
-              </section>
-            </>
-          ) : null}
-        </main>
+      <section className="page-cover" aria-label="University students studying together">
+        <Image src="/campus-cover.webp" alt="University students studying together" fill priority sizes="(max-width: 760px) 100vw, 1240px" />
+        <span className="cover-overlay" />
+        <blockquote>“A calm semester is built one focused block at a time.”</blockquote>
       </section>
 
-      <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon size={19} /><span>{item.label.split(" ")[0]}</span></button>; })}
-      </nav>
-      {toast ? <div className="toast"><CheckCircle2 size={17} />{toast}<button onClick={() => setToast(null)}><X size={14} /></button></div> : null}
+      <section className="notion-page">
+        <header className="page-identity">
+          <span className="page-icon"><GraduationCap size={37} /></span>
+          <p className="kicker">Your connected academic home</p>
+          <h1>University Dashboard</h1>
+          <p>Courses, deadlines, and a plan you can actually finish.</p>
+        </header>
+
+        {data.notice ? <div className="notice"><Info size={16} /><span>{data.notice}</span><button onClick={() => navigate("integration")}>Setup <ArrowRight size={13} /></button></div> : null}
+
+        <div className="dashboard-layout">
+          <aside className={`quick-rail ${menuOpen ? "open" : ""}`}>
+            <button className="close-rail" onClick={() => setMenuOpen(false)} aria-label="Close navigation"><X size={18} /></button>
+            <section className="rail-section">
+              <h3>Quick access</h3><div className="thin-rule" />
+              <button className="quick-link rust" onClick={() => navigate("assignments")}><span><Zap size={17} /></span><div><strong>{urgentRisks.length}</strong><small>Need attention</small></div><ChevronRight size={14} /></button>
+              <button className="quick-link sage" onClick={() => navigate("plan")}><span><Clock3 size={17} /></span><div><strong>{formatDuration(plan.totalPlannedMinutes)}</strong><small>Focus planned</small></div><ChevronRight size={14} /></button>
+              <button className="quick-link gold" onClick={() => navigate("assignments")}><span><Target size={17} /></span><div><strong>{dueThisWeek.length}</strong><small>Due this week</small></div><ChevronRight size={14} /></button>
+            </section>
+
+            <section className="rail-section navigation-section">
+              <h3>Navigation</h3><div className="thin-rule" />
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon size={16} /><span>{item.label}</span><ChevronRight size={13} /></button>;
+              })}
+            </section>
+
+            <section className="rail-section">
+              <h3>Study tools</h3><div className="thin-rule" />
+              <a href="https://classroom.google.com" target="_blank" rel="noreferrer"><Link2 size={14} />Google Classroom<ExternalLink size={12} /></a>
+              <a href="https://www.notion.so" target="_blank" rel="noreferrer"><Link2 size={14} />Open Notion<ExternalLink size={12} /></a>
+            </section>
+
+            <div className="rail-quote"><Sparkles size={17} /><p>Do the next clear thing. Let the system hold the rest.</p></div>
+            <div className="rail-status">{data.meta.connected ? <Cloud size={16} /> : <Unplug size={16} />}<div><strong>{data.meta.connected ? "Notion connected" : "Demo workspace"}</strong><small>{data.meta.assignmentCount} assignments available</small></div><i className={data.meta.connected ? "online" : ""} /></div>
+          </aside>
+          {menuOpen ? <button className="rail-scrim" onClick={() => setMenuOpen(false)} aria-label="Close navigation" /> : null}
+
+          <main className="workspace-main">
+            {activeView === "overview" ? (
+              <>
+                <div className="view-heading"><div><p>Today</p><h2>{greeting()}, Abu Sayed.</h2><span>Here is the clearest path through your academic week.</span></div><button className="primary-button" onClick={() => navigate("plan")}><CalendarDays size={15} />Open study plan</button></div>
+
+                {topRisk ? <div className="smart-callout"><span><BrainCircuit size={20} /></span><div><p>PulsePlan suggests</p><h3>Start with {topRisk.title}.</h3><small>{topRisk.reasons.join(" · ")}. Your first focus block is already reserved.</small></div><div className={`callout-score ${scoreTone(topRisk.riskScore)}`}><strong>{topRisk.riskScore}</strong><small>risk</small></div></div> : null}
+
+                <section className="notion-section">
+                  <SectionTitle label="Classes" title="Current courses" action={<button className="text-button" onClick={() => navigate("assignments")}>View work <ArrowRight size={13} /></button>} />
+                  <div className="course-gallery">
+                    {courseSummaries.map(({ course, assignments, nextDue }) => <article className="course-card" key={course} style={{ "--course": courseColor(course) } as React.CSSProperties}><div className="course-cover"><Library size={22} /><span>{course.split("·")[0].trim()}</span></div><div><h3>{course.split("·")[1]?.trim() || course}</h3><p>{assignments} active {assignments === 1 ? "assignment" : "assignments"}</p><small>{nextDue ? `Next due ${dueText(nextDue).toLowerCase()}` : "No open deadlines"}</small></div></article>)}
+                  </div>
+                </section>
+
+                <section className="notion-section">
+                  <SectionTitle label="Class schedule" title="This week’s focus timetable" action={<span className="subtle-label"><i />Focus block</span>} />
+                  <div className="week-timetable">
+                    {plan.days.map((day, index) => { const date = dayDate(day.date); return <article key={day.date} className={index === 0 ? "today" : ""}><header><strong>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(date)}</strong><span>{date.getDate()}</span></header><div>{day.sessions.slice(0, 3).map((session) => <button key={session.id} onClick={() => toggleSession(session.id)} className={completedSessions.has(session.id) ? "complete" : ""} style={{ borderLeftColor: courseColor(session.course) }}><time>{session.startTime}</time><strong>{session.title}</strong><small>{formatDuration(session.durationMinutes)}</small></button>)}{!day.sessions.length ? <p className="open-day">Open<br />capacity</p> : null}</div></article>; })}
+                  </div>
+                </section>
+
+                <section className="notion-section">
+                  <SectionTitle label="Assignment calendar" title="Upcoming deadlines" action={<button className="text-button" onClick={() => navigate("assignments")}>Full tracker <ArrowRight size={13} /></button>} />
+                  <div className="deadline-list">
+                    {openRisks.slice(0, 5).map((risk) => <article key={risk.id}><div className="date-tile"><strong>{dayDate(risk.dueDate).getDate()}</strong><span>{formatDate(risk.dueDate, { month: "short" })}</span></div><span className="course-pin" style={{ background: courseColor(risk.course) }} /><div className="deadline-main"><h3>{risk.title}</h3><p>{risk.course} · {formatDuration(risk.remainingMinutes)} left</p></div><div className={`risk-number ${scoreTone(risk.riskScore)}`}><strong>{risk.riskScore}</strong><span>risk</span></div><RiskPill risk={risk} /></article>)}
+                  </div>
+                </section>
+              </>
+            ) : null}
+
+            {activeView === "plan" ? (
+              <>
+                <div className="view-heading"><div><p>Study plan</p><h2>A realistic path through the week.</h2><span>Focus blocks stop at your capacity and never move past a deadline.</span></div><div className="view-actions"><button className="secondary-button" onClick={() => exportSessions(allSessions)}><Download size={14} />CSV</button><button className="primary-button" onClick={() => void syncPlan()} disabled={syncing}>{syncing ? <LoaderCircle className="spin" size={14} /> : <Cloud size={14} />}{data.meta.writeEnabled ? "Sync to Notion" : "Connect Notion"}</button></div></div>
+
+                <div className="capacity-callout"><span><Clock3 size={18} /></span><div><strong>Daily focus capacity</strong><small>Weekends automatically include one extra hour.</small></div><div className="capacity-picker">{[2, 3, 4, 5].map((hours) => <button key={hours} className={dailyHours === hours ? "active" : ""} onClick={() => setDailyHours(hours)}>{hours}h</button>)}</div></div>
+
+                {unscheduledTotal ? <div className="alert-callout"><AlertCircle size={18} /><div><strong>{formatDuration(unscheduledTotal)} cannot fit before its deadline.</strong><small>Add capacity or renegotiate a lower-priority item.</small></div><button onClick={() => setDailyHours((hours) => Math.min(5, hours + 1))}>Add an hour</button></div> : <div className="success-callout"><CheckCircle2 size={18} /><div><strong>Every deadline fits.</strong><small>Your week has enough protected focus time.</small></div></div>}
+
+                <section className="notion-section plan-section"><SectionTitle label="Weekly agenda" title="Scheduled focus blocks" />
+                  <div className="plan-board">{plan.days.map((day, index) => { const date = dayDate(day.date); return <article className={index === 0 ? "today" : ""} key={day.date}><header><div><strong>{new Intl.DateTimeFormat("en", { weekday: "long" }).format(date)}</strong>{index === 0 ? <em>Today</em> : null}</div><span>{formatDate(day.date)}</span><small>{formatDuration(day.plannedMinutes)} / {formatDuration(day.capacityMinutes)}</small></header><div className="day-meter"><i style={{ width: `${Math.min(100, day.plannedMinutes / day.capacityMinutes * 100)}%` }} /></div><div className="plan-stack">{day.sessions.map((session) => <button key={session.id} className={completedSessions.has(session.id) ? "done" : ""} onClick={() => toggleSession(session.id)} style={{ "--course": courseColor(session.course) } as React.CSSProperties}><time>{session.startTime}</time><strong>{session.title}</strong><span>{session.course}</span><small><Clock3 size={11} />{formatDuration(session.durationMinutes)}<i>{completedSessions.has(session.id) ? <Check size={10} /> : null}</i></small></button>)}{!day.sessions.length ? <div className="empty-day"><Sparkles size={17} /><span>Open capacity</span></div> : null}</div></article>; })}</div>
+                </section>
+              </>
+            ) : null}
+
+            {activeView === "assignments" ? (
+              <>
+                <div className="view-heading"><div><p>Assignment tracker</p><h2>See pressure before it becomes panic.</h2><span>Scores combine deadline, workload, priority, and momentum.</span></div></div>
+                <div className="assignment-toolbar"><label><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assignments or courses" /></label><div>{(["all", "needs-attention", "on-track"] as RiskFilter[]).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "needs-attention" ? "Needs attention" : "On track"}</button>)}</div></div>
+                <section className="notion-section"><SectionTitle label="Database" title={`${filteredRisks.length} assignments`} />
+                  <div className="assignment-table"><div className="table-head"><span>Assignment</span><span>Due</span><span>Work left</span><span>Risk</span><span>Status</span></div>{filteredRisks.map((risk) => <article key={risk.id}><div className="assignment-name"><span style={{ color: courseColor(risk.course), background: `${courseColor(risk.course)}18` }}><FileText size={16} /></span><div><strong>{risk.title}</strong><small>{risk.course} · {risk.priority}</small></div></div><div className="due-cell"><strong>{dueText(risk.dueDate)}</strong><small>{formatDate(risk.dueDate, { month: "short", day: "numeric", year: "numeric" })}</small></div><div className="work-cell"><strong>{formatDuration(risk.remainingMinutes)}</strong><span><i style={{ width: `${risk.estimatedMinutes ? risk.completedMinutes / risk.estimatedMinutes * 100 : 0}%` }} /></span></div><div className={`risk-number ${scoreTone(risk.riskScore)}`}><strong>{risk.riskScore}</strong><span>/100</span></div><RiskPill risk={risk} /><details><summary><ChevronRight size={14} />Why this score?</summary><div><span><b>{risk.breakdown.urgency}</b> Deadline</span><span><b>{risk.breakdown.workload}</b> Workload</span><span><b>{risk.breakdown.importance}</b> Priority</span><span><b>{risk.breakdown.inertia}</b> Momentum</span></div></details></article>)}</div>
+                </section>
+                <div className="method-note"><BrainCircuit size={20} /><div><strong>Transparent by design</strong><p>Deadline contributes up to 48 points, workload 26, priority 22, and starting inertia 8. Completed work always scores zero.</p></div></div>
+              </>
+            ) : null}
+
+            {activeView === "integration" ? (
+              <>
+                <div className="view-heading"><div><p>Notion setup</p><h2>Your Student OS is the source of truth.</h2><span>PulsePlan adds decisions and planning without replacing your workspace.</span></div><span className={`large-status ${data.meta.connected ? "connected" : ""}`}>{data.meta.connected ? <Cloud size={16} /> : <Unplug size={16} />}{data.meta.connected ? "Connected" : "Demo mode"}</span></div>
+                <div className="security-callout"><ShieldCheck size={19} /><div><strong>Your token stays server-side.</strong><small>The browser only receives normalized assignment fields.</small></div></div>
+                <section className="setup-layout">
+                  <article className="setup-steps"><SectionTitle label="Connection guide" title="Four small steps" /><ol><li><span>1</span><div><strong>Create a Notion integration</strong><p>Enable Read content and, for write-back, Insert content.</p><a href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">Open integrations <ExternalLink size={12} /></a></div></li><li><span>2</span><div><strong>Share both databases</strong><p>Add the integration to Assignments and Study Sessions through Connections.</p></div></li><li><span>3</span><div><strong>Add local secrets</strong><p>Copy <code>.env.example</code> to <code>.env.local</code>.</p><pre>NOTION_API_KEY=ntn_••••••\nNOTION_ASSIGNMENTS_DATA_SOURCE_ID=••••\nNOTION_SESSIONS_DATA_SOURCE_ID=••••</pre></div></li><li><span>4</span><div><strong>Restart PulsePlan</strong><p>The source badge changes to Notion live.</p></div></li></ol></article>
+                  <aside><article className="schema-card"><SectionTitle label="Read from" title="Assignments" /><dl><div><dt>Name</dt><dd>Title · required</dd></div><div><dt>Due</dt><dd>Date · required</dd></div><div><dt>Course</dt><dd>Relation or text</dd></div><div><dt>Status</dt><dd>Status or select</dd></div><div><dt>Estimated hours</dt><dd>Number</dd></div><div><dt>Priority</dt><dd>Select</dd></div></dl></article><article className="schema-card"><SectionTitle label="Write to" title="Study Sessions" /><dl><div><dt>Name</dt><dd>Title · required</dd></div><div><dt>Date</dt><dd>Date · required</dd></div><div><dt>Course</dt><dd>Select or text</dd></div><div><dt>Duration</dt><dd>Number</dd></div><div><dt>Status</dt><dd>Status or select</dd></div></dl></article></aside>
+                </section>
+              </>
+            ) : null}
+          </main>
+        </div>
+      </section>
+
+      <nav className="mobile-nav">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon size={18} /><span>{item.label.split(" ")[0]}</span></button>; })}</nav>
+      {toast ? <div className="toast"><CheckCircle2 size={16} /><span>{toast}</span><button onClick={() => setToast(null)}><X size={13} /></button></div> : null}
     </div>
   );
 }

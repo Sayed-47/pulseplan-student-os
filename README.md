@@ -1,5 +1,7 @@
 # PulsePlan
 
+![PulsePlan University Dashboard](./public/dashboard-preview.webp)
+
 **Your Notion Student OS, now proactive.**
 
 PulsePlan reads assignments from Notion, explains which deadlines are becoming risky, and creates a realistic seven-day study plan that respects daily capacity. The included demo workspace makes every feature testable without credentials.
@@ -204,6 +206,7 @@ Do not commit `.env.local` or expose a Notion token in screenshots.
 - [Notion: Query a data source](https://developers.notion.com/reference/query-a-data-source)
 - [Notion: Create a page](https://developers.notion.com/reference/post-page)
 - [Notion: Connections and capabilities](https://developers.notion.com/reference/capabilities)
+- Dashboard cover image from [Unsplash](https://images.unsplash.com/photo-1523240795612-9a054b0db644)
 
 Documentation details were summarized and rephrased for licensing compliance.
 
